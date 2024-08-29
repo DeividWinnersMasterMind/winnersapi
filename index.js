@@ -94,6 +94,71 @@ app.delete('/api/delete-data', async (req, res) => {
   }
 });
 
+// Función para realizar una selección aleatoria ponderada
+function weightedRandomSelection(percentages) {
+  const total = Object.values(percentages).reduce((acc, val) => acc + val, 0);
+  
+  // Generar un número aleatorio entre 0 y el total de los pesos
+  const random = Math.random() * total;
+
+  let cumulativeSum = 0;
+
+  // Iterar sobre cada clave y acumular su peso
+  for (const [key, value] of Object.entries(percentages)) {
+    cumulativeSum += value;
+    if (random <= cumulativeSum) {
+      return key;
+    }
+  }
+}
+
+app.post('/api/get-value', async (req, res) => {
+  const { url } = req.body;
+
+  try {
+    // Obtener todas las claves
+    const keys = await kv.keys('*');
+
+    // Verificar si hay claves
+    if (keys.length === 0) {
+      return res.status(404).json({ error: 'No hay datos almacenados.' });
+    }
+
+    // Obtener los valores asociados a las claves
+    const values = await Promise.all(keys.map(key => kv.get(key)));
+
+    // Crear un objeto con las claves y sus valores
+    const data = keys.reduce((acc, key, index) => {
+      acc[key] = values[index];
+      return acc;
+    }, {});
+
+    // Verificar si la URL existe en los datos recuperados
+    if (!data[url]) {
+      return res.status(404).json({ error: 'URL no encontrada en el almacenamiento KV' });
+    }
+
+    const percentages = data[url];
+
+    // Verificar que la suma de los porcentajes sea mayor a 0
+    const total = Object.values(percentages).reduce((acc, val) => acc + val, 0);
+    
+    if (total === 0) {
+      return res.status(400).json({ error: 'No se puede calcular, todos los valores son cero.' });
+    }
+
+    // Realizar la selección aleatoria ponderada
+    const selectedKey = weightedRandomSelection(percentages);
+
+    // Devolver la clave seleccionada
+    res.json({ selectedapikey: selectedKey });
+
+  } catch (error) {
+    console.error('Error al procesar la solicitud:', error);
+    return res.status(500).json({ message: 'Error al procesar la solicitud' });
+  }
+});
+
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log("Servidor corriendo en http://localhost:${port}");
